@@ -1,0 +1,16 @@
+{
+    "name": "Reasy",
+    "version": "1.0.0",
+    "description": "Projeto Final Integrador 1",
+    "manifest_version": 3,
+    "permissions": ["activeTab", "scripting"],
+    "action": {
+        "default_popup": "index.html"
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["script.js"]
+        }
+    ]
+}

@@ -1,10 +1,15 @@
+// const script = document.createElement("script");
+// script.src = chrome.runtime.getURL("groq-script.js");
+// script.type = "module"; // Ensure it's treated as an ES module
+// document.head.appendChild(script);
 
 let selectedText = "";
+let returnGroq = "";
 
-let btnResume = this.generateBtnResume();
-btnResume.onclick = () => this.openTextDialog();
+let btnResume = generateBtnResume();
+btnResume.onclick = () => openTextDialog();
 
-let dialog = this.generateDialog();
+let dialog = generateDialog();
 
 function generateBtnResume() {
     let button = document.createElement("button");
@@ -41,6 +46,7 @@ function generateDialog() {
     dialog.style.zIndex = "10000";
     dialog.style.backgroundColor = "#fff";
     dialog.style.fontFamily = "open sans";
+    dialog.style.color = "rgba(0,0,0,0.7)";
     dialog.style.display = "none";
     dialog.style.animation = "fadeIn 0.3s ease-in-out";
     dialog.style.maxHeight = "50vh";
@@ -52,7 +58,7 @@ function generateDialog() {
 
 document.addEventListener("mouseup", (event) => {
     selectedText = window.getSelection().toString().trim();
-    if (selectedText.length > 0) {
+    if (selectedText) {
         if(!document.getElementById("ext-selection-dialog")?.style.display !== 'none') {
             btnResume.style.left = `${event.pageX + 10}px`;
             btnResume.style.top = `${event.pageY + 10}px`;
@@ -68,7 +74,7 @@ document.addEventListener("mouseup", (event) => {
 function generateTextDialogContent() {
     return `
         <div class="view-dialog hidden" style="animation: fadeIn 0.3s forwards">
-            <a id="btn-reasy" style="font-size: 32px; font-weight: 600; margin: 0; cursor: pointer;">Reasy</a>
+            <a id="btn-reasy" style="font-size: 32px; font-weight: 600; margin: 0; cursor: pointer; color: black;">Reasy</a>
         </div>
         <div class="view-dialog" style="display: flex; flex-direction: column;">
             <div style="display: flex; flex-direction: row; justify-content: space-between; margin-bottom: 15px;">
@@ -82,15 +88,28 @@ function generateTextDialogContent() {
                     </button>
                 </div>
             </div>
-            <label style="overflow-y: auto;">${selectedText}</label>
+            <label style="overflow-y: auto;">${returnGroq}</label>
         </div>
     `
 }
 
-function openTextDialog() {
+async function openTextDialog() {
+    
+    await consultaGroq(selectedText);
+    
+    chrome.runtime.sendMessage({ action: "fetchGroq", message: "Hello, Groq!" }, (response) => {
+        console.log(response);
+        
+        if (response.error) {
+          console.error("Error:", response.error);
+        } else {
+          console.log("Groq Response:", response.reply);
+        }
+    });
+      
     dialog.style.animation = "fadeIn 0.3s forwards";
     
-    btnResume.style.display = "none"; // Esconde o botão após abrir o diálogo
+    btnResume.style.display = "none";
     dialog.innerHTML = this.generateTextDialogContent();
 
     window.getSelection().removeAllRanges();  
@@ -114,3 +133,21 @@ function openTextDialog() {
 
     dialog.style.display = "flex";
 }
+
+async function consultaGroq(selectedText) {
+    const resposta = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer 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",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: "Preciso que você resuma de maneira objetiva este texto:" + selectedText }]
+      })
+    });
+  
+    const data = await resposta.json();
+    console.log(data);
+    returnGroq = data.choices[0].message.content;
+  }

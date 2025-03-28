@@ -1,7 +1,3 @@
-// const script = document.createElement("script");
-// script.src = chrome.runtime.getURL("groq-script.js");
-// script.type = "module"; // Ensure it's treated as an ES module
-// document.head.appendChild(script);
 
 let selectedText = "";
 let returnGroq = "";
@@ -12,22 +8,26 @@ btnResume.onclick = () => openTextDialog();
 let dialog = generateDialog();
 
 function generateBtnResume() {
-    let button = document.createElement("button");
-    button.id = "ext-selection-btn";
+    let button = document.querySelector("#ext-selection-btn");
+    if(!button) {
+        button = document.createElement("button");
+        button.id = "ext-selection-btn";
+        button.style.position = "absolute";
+        button.style.zIndex = "9999";
+        button.style.border = "none";
+        button.style.display = "none";
+        button.style.borderRadius = "50%";
+        button.style.backgroundColor = "#fff";
+        button.style.color = "#000";
+        button.style.cursor = "pointer";
+        button.style.fontSize = "14px";
+        button.style.boxShadow = "0px 2px 5px rgba(0,0,0,0.3)";
+        button.style.transition = "opacity 0.2s";
+        
+        document.body.appendChild(button);
+    }
     button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--!Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path d="M448 432V80c0-26.5-21.5-48-48-48H48C21.5 32 0 53.5 0 80v352c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48zM112 192c-8.8 0-16-7.2-16-16v-32c0-8.8 7.2-16 16-16h128c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H112zm0 96c-8.8 0-16-7.2-16-16v-32c0-8.8 7.2-16 16-16h224c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H112zm0 96c-8.8 0-16-7.2-16-16v-32c0-8.8 7.2-16 16-16h64c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16h-64z"/></svg>';
-    button.style.position = "absolute";
-    button.style.zIndex = "9999";
-    button.style.border = "none";
-    button.style.display = "none";
-    button.style.borderRadius = "50%";
-    button.style.backgroundColor = "#fff";
-    button.style.color = "#000";
-    button.style.cursor = "pointer";
-    button.style.fontSize = "14px";
-    button.style.boxShadow = "0px 2px 5px rgba(0,0,0,0.3)";
-    button.style.transition = "opacity 0.2s";
-
-    document.body.appendChild(button);
+    button.style.pointerEvents = "initial";
 
     return button;
 }
@@ -73,7 +73,7 @@ document.addEventListener("mouseup", (event) => {
 
 function generateTextDialogContent() {
     return `
-        <div class="view-dialog hidden" style="animation: fadeIn 0.3s forwards">
+        <div class="view-dialog minimized-dialog hidden" style="animation: fadeIn 0.3s forwards">
             <a id="btn-reasy" style="font-size: 32px; font-weight: 600; margin: 0; cursor: pointer; color: black;">Reasy</a>
         </div>
         <div class="view-dialog" style="display: flex; flex-direction: column;">
@@ -93,23 +93,24 @@ function generateTextDialogContent() {
     `
 }
 
+function startLoad() {
+    btnResume.innerHTML = '<svg id="load-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--!Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path d="M304 48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zm0 416a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM48 304a48 48 0 1 0 0-96 48 48 0 1 0 0 96zm464-48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM142.9 437A48 48 0 1 0 75 369.1 48 48 0 1 0 142.9 437zm0-294.2A48 48 0 1 0 75 75a48 48 0 1 0 67.9 67.9zM369.1 437A48 48 0 1 0 437 369.1 48 48 0 1 0 369.1 437z"/></svg>';
+    btnResume.style.pointerEvents = "none";
+    // btnResume.disabled = true;
+}
+
 async function openTextDialog() {
-    
-    await consultaGroq(selectedText);
-    
-    chrome.runtime.sendMessage({ action: "fetchGroq", message: "Hello, Groq!" }, (response) => {
-        console.log(response);
-        
-        if (response.error) {
-          console.error("Error:", response.error);
-        } else {
-          console.log("Groq Response:", response.reply);
-        }
+
+    startLoad();
+
+    await consultaGroq(selectedText).then(() => {
+        btnResume = generateBtnResume();
+        btnResume.onclick = () => openTextDialog();
+        btnResume.style.display = "none";
     });
       
     dialog.style.animation = "fadeIn 0.3s forwards";
     
-    btnResume.style.display = "none";
     dialog.innerHTML = this.generateTextDialogContent();
 
     window.getSelection().removeAllRanges();  

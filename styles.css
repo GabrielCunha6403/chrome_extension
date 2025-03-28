@@ -1,3 +1,7 @@
+a:hover {
+    text-decoration: none !important;
+}
+
 #ext-selection-btn {
     position: absolute;
     z-index: 9999;
@@ -20,6 +24,10 @@
 #ext-selection-btn svg {
     height: 24px;
     width: 24px;
+}
+
+#load-svg {
+    animation: rotating 1s infinite;
 }
 
 .view-dialog button svg {
@@ -77,5 +85,11 @@ button:focus {
     }
     100% {
         transform: translateX(-3px);
+    }
+}
+
+@keyframes rotating {
+    50% {
+        transform: rotate(180deg);
     }
 }

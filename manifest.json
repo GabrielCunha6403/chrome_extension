@@ -3,7 +3,7 @@
   "name": "Reasy",
   "version": "1.0.0",
   "description": "Selecione um texto na página e veja um resumo acessível em linguagem simples.",
-  "permissions": ["identity"],
+  "permissions": ["identity", "storage"],
   "host_permissions": ["https://chrome-extension-backend-tan.vercel.app/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [

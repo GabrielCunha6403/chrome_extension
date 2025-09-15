@@ -1,15 +1,13 @@
 {
-    "name": "Reasy",
-    "version": "1.0.0",
-    "description": "Projeto Final Integrador 1",
-    "manifest_version": 3,
-    "permissions": ["storage", "scripting", "activeTab"],
-    "host_permissions": ["https://cdn.jsdelivr.net/"],
-    "content_scripts": [
-        {
-            "matches": ["<all_urls>"],
-            "js": ["script.js"],
-            "css": ["styles.css"]
-        }
-    ]
+  "manifest_version": 3,
+  "name": "Reasy",
+  "version": "1.0.0",
+  "description": "Selecione um texto na página e veja um resumo acessível em linguagem simples.",
+  "permissions": ["identity"],
+  "host_permissions": ["https://chrome-extension-backend-tan.vercel.app/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "js": ["content.js"] }
+  ],
+  "action": { "default_title": "Reasy" }
 }

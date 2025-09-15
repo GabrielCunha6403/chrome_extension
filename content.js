@@ -24,16 +24,21 @@ document.addEventListener("mouseup", () => {
     return;
   }
 
-  const rect = getSelectionRect();
+  const rect = getSelectionEndRect(); // <-- nova função (abaixo)
   if (!rect) {
     hideButton();
     return;
   }
-  const x = Math.min(rect.right + 8, window.innerWidth - 44);
-  const y = Math.max(rect.top - 44, 8);
+
+  // rect já é relativo à viewport; como o botão é FIXED, não some scroll!
+  const btnW = 36, btnH = 36; // se usar outro tamanho, ajuste
+  const gap = 8;
+
+  const x = Math.min(rect.right + gap, window.innerWidth - btnW - 4);
+  const y = Math.max(rect.bottom - btnH, 4); // alinha pela linha de base do fim
 
   btnResume.style.left = `${x}px`;
-  btnResume.style.top = `${y + window.scrollY}px`;
+  btnResume.style.top  = `${y}px`;
   btnResume.style.display = "flex";
 });
 
@@ -78,10 +83,12 @@ function createDialog() {
   dlg.id = "ext-selection-dialog";
   Object.assign(dlg.style, {
     position: "fixed",
+    flexDirection: "column",
     bottom: "32px",
     right: "32px",
     padding: "15px",
     border: "none",
+    gap: "8px",
     borderRadius: "10px",
     boxShadow: "0 2px 10px rgba(0,0,0,0.3)",
     maxWidth: "420px",
@@ -157,18 +164,48 @@ function updateButtonPositionFromSelection() {
 function getSelectionRect() {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return null;
-  const range = sel.getRangeAt(0);
-  const rects = range.getClientRects();
-  if (rects.length > 0) return rects[rects.length - 1];
 
-  const span = document.createElement("span");
-  span.appendChild(document.createTextNode("\u200b"));
-  range.insertNode(span);
-  const rect = span.getBoundingClientRect();
-  span.parentNode?.removeChild(span);
-  range.collapse(false);
-  return rect;
+  const range = sel.getRangeAt(0);
+
+  // 1) Tente o bounding box da seleção inteira (funciona bem em multi-parágrafo)
+  const box = range.getBoundingClientRect();
+  if (box && box.width > 0 && box.height > 0) return box;
+
+  // 2) Caso raro: some `ClientRects` não nulos
+  const rects = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0);
+  if (rects.length === 0) return null;
+
+  // Faz a união de todos os retângulos (cobre múltiplos parágrafos/linhas)
+  const left   = Math.min(...rects.map(r => r.left));
+  const top    = Math.min(...rects.map(r => r.top));
+  const right  = Math.max(...rects.map(r => r.right));
+  const bottom = Math.max(...rects.map(r => r.bottom));
+
+  return new DOMRect(left, top, right - left, bottom - top);
 }
+
+function getSelectionEndRect() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+
+  // clona o range atual e colapsa no fim (caret)
+  const r = sel.getRangeAt(0).cloneRange();
+  r.collapse(false);
+
+  // tenta bounding rect direto
+  let rect = r.getBoundingClientRect();
+  if (rect && (rect.width > 0 || rect.height > 0)) return rect;
+
+  // se for zero (colunas/linhas vazias), injeta um span invisível para medir
+  const span = document.createElement("span");
+  // zero-width space evita quebrar layout
+  span.appendChild(document.createTextNode("\u200b"));
+  r.insertNode(span);
+  rect = span.getBoundingClientRect();
+  span.parentNode?.removeChild(span);
+  return rect || null;
+}
+
 
 function hideButton() {
   btnResume.style.display = "none";
@@ -176,34 +213,62 @@ function hideButton() {
 
 function renderDialog() {
   dialog.innerHTML = `
-    <div class="view-dialog" style="display:flex;flex-direction:column;gap:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <h3 style="font-size:16px;font-weight:700;margin:0;">Reasy</h3>
-        <div style="display:flex;gap:6px;">
-          <button id="ext-min-dialog" title="Minimizar" style="background:transparent;border:0;cursor:pointer;">
-            <svg style="height:16px;width:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M416 208H32c-17.7 0-32 14.3-32 32v32c0 17.7 14.3 32 32 32h384c17.7 0 32-14.3 32-32v-32c0-17.7-14.3-32-32-32z"/></svg>
-          </button>
-          <button id="ext-close-dialog" title="Fechar" style="background:transparent;border:0;cursor:pointer;">
-            <svg style="height:16px;width:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 512"><path d="M242.7 256l100.1-100.1c12.3-12.3 12.3-32.2 0-44.5l-22.2-22.2c-12.3-12.3-32.2-12.3-44.5 0L176 189.3 75.9 89.2c-12.3-12.3-32.2-12.3-44.5 0L9.2 111.5c-12.3 12.3-12.3 32.2 0 44.5L109.3 256 9.2 356.1c-12.3 12.3-12.3 32.2 0 44.5l22.2 22.2c12.3 12.3 32.2 12.3 44.5 0L176 322.7l100.1 100.1c12.3 12.3 32.2 12.3 44.5 0l22.2-22.2c12.3-12.3 12.3-32.2 0-44.5L242.7 256z"/></svg>
-          </button>
-        </div>
+    <div class="reasy-header" style="
+      display:flex; align-items:center; gap:8px;
+      position:sticky; top:0; background:#fff; padding-bottom:6px; border-bottom:1px solid rgba(0,0,0,.08);
+    ">
+      <h3 style="font-size:16px;font-weight:700;margin:0;">Reasy</h3>
+      <div class="reasy-spacer" style="flex:1 1 auto;"></div>
+      <div class="reasy-actions" style="display:flex;gap:6px; white-space:nowrap;">
+        <button id="ext-min-dialog" title="Minimizar/Maximizar" style="background:transparent;border:0;cursor:pointer;">
+          <svg id="ext-min-icon" style="height:16px;width:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+            <path d="M416 208H32c-17.7 0-32 14.3-32 32v32c0 17.7 14.3 32 32 32h384c17.7 0 32-14.3 32-32v-32c0-17.7-14.3-32-32-32z"/>
+          </svg>
+        </button>
+        <button id="ext-close-dialog" title="Fechar" style="background:transparent;border:0;cursor:pointer;">
+          <svg style="height:16px;width:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 512">
+            <path d="M242.7 256l100.1-100.1c12.3-12.3 12.3-32.2 0-44.5l-22.2-22.2c-12.3-12.3-32.2-12.3-44.5 0L176 189.3 75.9 89.2c-12.3-12.3-32.2-12.3-44.5 0L9.2 111.5c-12.3 12.3-12.3 32.2 0 44.5L109.3 256 9.2 356.1c-12.3 12.3-12.3 32.2 0 44.5l22.2 22.2c12.3 12.3 32.2 12.3 44.5 0L176 322.7l100.1 100.1c12.3 12.3 32.2 12.3 44.5 0l22.2-22.2c12.3-12.3 12.3-32.2 0-44.5L242.7 256z"/>
+          </svg>
+        </button>
       </div>
-      <div id="reasy-result" style="overflow:auto;max-height:50vh;line-height:1.45;font-size:14px;white-space:pre-wrap;">${returnGroq || "Gerando resumo..."}</div>
     </div>
+
+    <div id="reasy-content" style="
+      overflow:auto; max-height:50vh; line-height:1.45; font-size:14px; white-space:pre-wrap;
+    ">${returnGroq || "Gerando resumo..."}</div>
   `;
 
+  // fechar
   document.getElementById("ext-close-dialog").addEventListener("click", () => {
-    dialog.style.animation = "fadeOut 0.3s forwards";
+    dialog.style.animation = "fadeOut 0.2s forwards";
     setTimeout(() => {
       dialog.style.display = "none";
       selectedText = "";
       returnGroq = "";
-    }, 250);
+    }, 180);
   });
 
+  // minimizar/maximizar (só o conteúdo)
   document.getElementById("ext-min-dialog").addEventListener("click", () => {
-    const body = dialog.querySelector(".view-dialog");
-    if (body) body.classList.toggle("hidden");
+    const content = document.getElementById("reasy-content");
+    const icon = document.getElementById("ext-min-icon");
+    const collapsed = content.style.display === "none";
+
+    if (collapsed) {
+      content.style.display = "block";
+      icon.outerHTML = `
+        <svg id="ext-min-icon" style="height:16px;width:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+          <path d="M416 208H32c-17.7 0-32 14.3-32 32v32c0 17.7 14.3 32 32 32h384c17.7 0 32-14.3 32-32v-32c0-17.7-14.3-32-32-32z"/>
+        </svg>
+      `;
+    } else {
+      content.style.display = "none";
+      icon.outerHTML = `
+        <svg id="ext-min-icon" style="height:16px;width:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+          <path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32V224H48c-17.7 0-32 14.3-32 32s14.3 32 32 32H192V432c0 17.7 14.3 32 32 32s32-14.3 32-32V288H400c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z"/>
+        </svg>
+      `;
+    }
   });
 }
 
@@ -234,8 +299,19 @@ async function openTextDialog() {
     btnResume.style.display = "none";
   }
 
-  renderDialog();
-  dialog.style.display = "flex";
+  // se o dialog ainda não existe (primeira vez), cria ele completo
+  if (!document.getElementById("reasy-content")) {
+    renderDialog();
+    dialog.style.display = "flex";
+  } else {
+    // só atualiza o conteúdo
+    const pane = document.getElementById("reasy-content");
+    if (pane) {
+      pane.textContent = returnGroq;
+    }
+    dialog.style.display = "flex";
+  }
+
 
   try { window.getSelection()?.removeAllRanges(); } catch {}
 }

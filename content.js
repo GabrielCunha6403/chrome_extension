@@ -42,6 +42,69 @@ document.addEventListener("mouseup", () => {
   btnResume.style.display = "flex";
 });
 
+function escapeHtml(s) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Markdown-lite: **bold** e linhas começando com "* "
+function formatMarkdownLite(text) {
+  if (!text) return "";
+
+  // 1) escapa HTML
+  let t = escapeHtml(text);
+
+  // 2) quebra por linhas para montar listas <ul>
+  const lines = t.split(/\r?\n/);
+  let html = "";
+  let inList = false;
+
+  const flushListIfOpen = () => {
+    if (inList) {
+      html += "</ul>";
+      inList = false;
+    }
+  };
+
+  for (let raw of lines) {
+    const line = raw.trimEnd();
+
+    // linha de tópico: começa com "* "
+    if (/^\*\s+/.test(line)) {
+      if (!inList) {
+        html += '<ul style="margin:6px 0 10px 18px; padding-left: 18px;">';
+        inList = true;
+      }
+      const liContent = line.replace(/^\*\s+/, "");
+      // aplica negrito dentro do bullet também
+      const liWithBold = liContent.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      html += `<li>${liWithBold}</li>`;
+      continue;
+    }
+
+    // não é bullet
+    flushListIfOpen();
+
+    // linhas em branco => separador de parágrafo
+    if (/^\s*$/.test(line)) {
+      html += "<br/>";
+      continue;
+    }
+
+    // texto normal; aplica **bold**
+    const withBold = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    html += `<p style="margin: 6px 0;">${withBold}</p>`;
+  }
+
+  flushListIfOpen();
+  return html;
+}
+
+
 function createFloatingButton() {
   let button = document.getElementById("ext-selection-btn");
   if (!button) {
@@ -234,8 +297,8 @@ function renderDialog() {
     </div>
 
     <div id="reasy-content" style="
-      overflow:auto; max-height:50vh; line-height:1.45; font-size:14px; white-space:pre-wrap;
-    ">${returnGroq || "Gerando resumo..."}</div>
+    overflow:auto; max-height:50vh; line-height:1.45; font-size:14px; white-space:normal;
+    ">${formatMarkdownLite(returnGroq || "Gerando resumo...")}</div>
   `;
 
   // fechar
@@ -299,15 +362,13 @@ async function openTextDialog() {
     btnResume.style.display = "none";
   }
 
-  // se o dialog ainda não existe (primeira vez), cria ele completo
   if (!document.getElementById("reasy-content")) {
     renderDialog();
     dialog.style.display = "flex";
   } else {
-    // só atualiza o conteúdo
     const pane = document.getElementById("reasy-content");
     if (pane) {
-      pane.textContent = returnGroq;
+      pane.innerHTML = formatMarkdownLite(returnGroq);
     }
     dialog.style.display = "flex";
   }
@@ -329,8 +390,8 @@ function consultaGroq(text) {
         return reject(new Error(resp.error));
       }
       returnGroq = resp.summary;
-      const el = document.getElementById("reasy-result");
-      if (el) el.textContent = returnGroq;
+      const pane = document.getElementById("reasy-content");
+      if (pane) pane.innerHTML = formatMarkdownLite(returnGroq);
       resolve(resp.summary);
     });
   });

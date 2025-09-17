@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Reasy — Configurações</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 12px; width: 320px; }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    label { display:block; font-weight: 600; margin-top: 10px; }
+    select { width: 100%; padding: 6px; margin-top: 6px; }
+    .hint { color: #666; font-size: 12px; margin-top: 6px; }
+    button.save { margin-top: 14px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: #111; color: #fff; cursor: pointer;}
+    .ok { color: #0a0; font-size: 12px; margin-top: 6px; display:none; }
+    .err { color: #c62828; font-size: 12px; margin-top: 6px; display:none; }
+  </style>
+</head>
+<body>
+  <h1>Configurações</h1>
+
+  <label for="font">Fonte do Resumo</label>
+  <select id="font">
+    <option value="Arial, sans-serif">Arial</option>
+    <option value="Times New Roman, serif">Times New Roman</option>
+    <option value="Verdana, sans-serif">Verdana</option>
+    <option value="Georgia, serif">Georgia</option>
+  </select>
+
+  <label for="color">Cor do Resumo</label>
+  <select id="color">
+    <option value="black">Preto</option>
+    <option value="red">Vermelho</option>
+    <option value="blue">Azul</option>
+    <option value="green">Verde</option>
+  </select>
+
+  <label for="style">Tipo do Resumo</label>
+  <select id="style">
+    <option value="texto">Apenas texto</option>
+    <option value="topicos">Com tópicos</option>
+    <option value="mesclado">Mesclado</option>
+  </select>
+
+  <div class="hint">As preferências ficam salvas neste navegador.</div>
+  <button class="save" id="saveBtn">Salvar</button>
+  <div class="ok" id="okMsg">Preferências salvas!</div>
+  <div class="err" id="errMsg">Erro ao salvar (veja o console do popup).</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

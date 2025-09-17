@@ -6,6 +6,9 @@ const GOOGLE_CLIENT_ID = "145943388451-ot0v4lb7p290n59rjng6o543t0p06sfu.apps.goo
 const K_APPJWT = "reasy_appJwt";
 const K_APPJWT_EXP = "reasy_appJwtExp";
 const K_EMAIL = "reasy_email";
+const K_SETTINGS = "reasy_settings";
+
+const defaultSettings =  { source: "Arial, sans-serif", color: "black", style: "mesclado" };
 
 // ===== STATE EM MEMÓRIA =====
 let appJwt = null;
@@ -169,3 +172,36 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Opcional: carrega cache logo que o SW acorda
 loadFromStorage();
+
+async function loadSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([K_SETTINGS], (data) => {
+      resolve({ ...defaultSettings, ...(data[K_SETTINGS] || {}) });
+    });
+  });
+}
+
+async function callSummarize(text) {
+  await ensureAuth();
+  const settings = await loadSettings(); // ← pega fonte/estilo/cor (cor é visual, mas mando tudo se quiser logar)
+
+  const r = await fetch(`${BACKEND_URL}/api/summarize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${appJwt}`
+    },
+    body: JSON.stringify({
+      text,
+      options: {
+        source: settings.source,  // ex.: "llama-3.3-70b"
+        style: settings.style     // "texto" | "topicos" | "mesclado"
+        // color é visual; o backend pode ignorar
+      }
+    })
+  });
+
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data.summary;
+}

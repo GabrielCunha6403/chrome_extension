@@ -5,9 +5,35 @@ let returnGroq = "";
 
 const btnResume = createFloatingButton();
 const dialog = createDialog();
+const K_SETTINGS = "reasy_settings"
+
+const defaultSettings = { source: "Aria, sans-serif", color: "black", style: "mesclado" };
+
 injectBaseStyles();
 
 btnResume.addEventListener("click", () => openTextDialog());
+
+function loadSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([K_SETTINGS], (data) => {
+      resolve({ ...defaultSettings, ...(data[K_SETTINGS] || {}) });
+    });
+  });
+}
+
+function applyContentStyle(settings) {
+  const pane = document.getElementById("reasy-content");
+  if (!pane) return;
+  const map = { black: "#111", red: "#c62828", blue: "#1565c0", green: "#2e7d32" };
+  pane.style.color = map[settings.color] || "#111";
+  pane.style.fontFamily = settings.font || "Arial, sans-serif";
+}
+
+function applyContentFont(font) {
+  const pane = document.getElementById("reasy-content");
+  if (!pane) return;
+  pane.style.fontFamily = font;
+}
 
 document.addEventListener("mouseup", () => {
   selectedText = getCurrentSelectionText();
@@ -333,6 +359,8 @@ function renderDialog() {
       `;
     }
   });
+
+  loadSettings().then(s => applyContentStyle(s));
 }
 
 function startButtonLoading() {
@@ -370,6 +398,7 @@ async function openTextDialog() {
     if (pane) {
       pane.innerHTML = formatMarkdownLite(returnGroq);
     }
+    loadSettings().then(s => applyContentStyle(s));
     dialog.style.display = "flex";
   }
 
@@ -392,7 +421,15 @@ function consultaGroq(text) {
       returnGroq = resp.summary;
       const pane = document.getElementById("reasy-content");
       if (pane) pane.innerHTML = formatMarkdownLite(returnGroq);
+      loadSettings().then(s => applyContentStyle(s));
       resolve(resp.summary);
     });
   });
 }
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes[K_SETTINGS]) return;
+  const newSettings = { ...defaultSettings, ...(changes[K_SETTINGS].newValue || {}) };
+  applyContentStyle(newSettings);
+});
+

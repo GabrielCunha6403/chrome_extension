@@ -80,3 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadUI();
   $("saveBtn").addEventListener("click", saveUI);
 });
+
+document.getElementById("closePopup").addEventListener("click", () => {
+  window.close();
+});

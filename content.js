@@ -2,12 +2,20 @@ console.log("[Reasy] content.js carregado");
 
 let selectedText = "";
 let returnGroq = "";
+let closeTimerId = null;
+
+let dragActive = false;
+let dragStart = { x: 0, y: 0 };
+let dialogStart = {left: 0, top: 0};
+let draggableBound = false;
+let lastDialogPos = null;
 
 const btnResume = createFloatingButton();
 const dialog = createDialog();
 const K_SETTINGS = "reasy_settings"
+const DRAG_THRESHOLD = 4;
 
-const defaultSettings = { source: "Aria, sans-serif", color: "black", style: "mesclado" };
+const defaultSettings = { font: "Aria, sans-serif", color: "black", style: "mesclado" };
 
 injectBaseStyles();
 
@@ -300,6 +308,119 @@ function hideButton() {
   btnResume.style.display = "none";
 }
 
+function makeDialogDraggable() {
+  if (draggableBound) return;
+  const header = dialog.querySelector(".reasy-header");
+  if (!header) return;
+
+  header.style.cursor = "move";
+  header.style.userSelect = "none";
+  header.style.touchAction = "none";
+  header.style.zIndex = "1"; // header sempre acima do conteúdo
+
+  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+  const SAFE_MARGIN = 40; // quanto podemos deixar “para fora” da viewport
+  let startedAsDrag = false;
+
+  // helper: checa se o mousedown/pointerdown ocorreu dentro da área do header
+  function isInHeaderArea(ev) {
+    const r = header.getBoundingClientRect();
+    return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+  }
+
+  const beginDrag = (ev) => {
+    // só inicia se começou realmente dentro do header
+    if (!isInHeaderArea(ev)) return false;
+
+    // ignora cliques nos botões
+    const target = ev.target;
+    if (target.closest("#ext-min-dialog") || target.closest("#ext-close-dialog")) return false;
+
+    // converte bottom/right => top/left no 1º arraste
+    const rect = dialog.getBoundingClientRect();
+    dialog.style.position = "fixed";
+    dialog.style.left = rect.left + "px";
+    dialog.style.top = rect.top + "px";
+    dialog.style.right = "auto";
+    dialog.style.bottom = "auto";
+
+    dragActive = true;
+    startedAsDrag = false;
+    dragStart.x = ev.clientX;
+    dragStart.y = ev.clientY;
+    dialogStart.left = rect.left;
+    dialogStart.top = rect.top;
+    return true;
+  };
+
+  const maybeStartDrag = (ev) => {
+    if (!dragActive || startedAsDrag) return;
+    const dx = Math.abs(ev.clientX - dragStart.x);
+    const dy = Math.abs(ev.clientY - dragStart.y);
+    if (dx >= DRAG_THRESHOLD || dy >= DRAG_THRESHOLD) {
+      startedAsDrag = true;
+      document.body.style.userSelect = "none";
+    }
+  };
+
+  const moveDrag = (ev) => {
+    if (!dragActive) return;
+    maybeStartDrag(ev);
+    if (!startedAsDrag) return;
+
+    const dx = ev.clientX - dragStart.x;
+    const dy = ev.clientY - dragStart.y;
+
+    const rect = dialog.getBoundingClientRect();
+
+    // Limites “elásticos”: permitem sair até SAFE_MARGIN para manter sempre arrastável
+    const minLeft = Math.min(0, window.innerWidth - SAFE_MARGIN - rect.width);
+    const maxLeft = Math.max(0, window.innerWidth - rect.width + SAFE_MARGIN);
+    const minTop  = Math.min(0, window.innerHeight - SAFE_MARGIN - rect.height);
+    const maxTop  = Math.max(0, window.innerHeight - rect.height + SAFE_MARGIN);
+
+    dialog.style.left = clamp(dialogStart.left + dx, minLeft, maxLeft) + "px";
+    dialog.style.top  = clamp(dialogStart.top  + dy, minTop,  maxTop)  + "px";
+  };
+
+  const endDrag = () => {
+    if (!dragActive) return;
+    dragActive = false;
+    document.body.style.userSelect = "";
+    startedAsDrag = false;
+  };
+
+  // Pointer events (preferidos)
+  const onPointerDown = (e) => {
+    if ((e.button !== undefined && e.button !== 0) && (e.buttons !== undefined && e.buttons !== 1)) return;
+    const ok = beginDrag(e);
+    if (!ok) return;
+    try { header.setPointerCapture?.(e.pointerId); } catch {}
+  };
+  const onPointerMove = (e) => moveDrag(e);
+  const onPointerUp   = () => endDrag();
+
+  header.addEventListener("pointerdown", onPointerDown, { passive: true });
+  window.addEventListener("pointermove", onPointerMove, { passive: true });
+  window.addEventListener("pointerup", onPointerUp, { passive: true });
+  window.addEventListener("pointercancel", onPointerUp, { passive: true });
+  window.addEventListener("blur", onPointerUp, { passive: true });
+
+  // Fallback mouse
+  const onMouseDown = (e) => { if (e.button === 0) beginDrag(e); };
+  const onMouseMove = (e) => moveDrag(e);
+  const onMouseUp   = () => endDrag();
+
+  header.addEventListener("mousedown", onMouseDown, { passive: true });
+  window.addEventListener("mousemove", onMouseMove, { passive: true });
+  window.addEventListener("mouseup", onMouseUp,   { passive: true });
+
+  draggableBound = true;
+}
+
+
+
+
 function renderDialog() {
   dialog.innerHTML = `
     <div class="reasy-header" style="
@@ -327,15 +448,28 @@ function renderDialog() {
     ">${formatMarkdownLite(returnGroq || "Gerando resumo...")}</div>
   `;
 
-  // fechar
+  // fechar (com controle de timeout)
   document.getElementById("ext-close-dialog").addEventListener("click", () => {
-    dialog.style.animation = "fadeOut 0.2s forwards";
-    setTimeout(() => {
-      dialog.style.display = "none";
-      selectedText = "";
-      returnGroq = "";
-    }, 180);
-  });
+  // se já existe um timer antigo, cancela
+  if (closeTimerId) {
+    clearTimeout(closeTimerId);
+    closeTimerId = null;
+  }
+
+  // anima para sair
+  dialog.style.animation = "fadeOut 0.2s forwards";
+
+  // agenda esconder após a animação
+  closeTimerId = setTimeout(() => {
+    dialog.style.display = "none";
+    // limpa estados apenas quando realmente fechou
+    selectedText = "";
+    returnGroq = "";
+    closeTimerId = null;
+  }, 200);
+});
+
+  makeDialogDraggable();
 
   // minimizar/maximizar (só o conteúdo)
   document.getElementById("ext-min-dialog").addEventListener("click", () => {
@@ -358,6 +492,10 @@ function renderDialog() {
         </svg>
       `;
     }
+
+    dialog.style.animation = "none";
+    void dialog.offsetWidth;
+    dialog.style.animation = "fadeIn 0.2s forwards"
   });
 
   loadSettings().then(s => applyContentStyle(s));
@@ -392,16 +530,33 @@ async function openTextDialog() {
 
   if (!document.getElementById("reasy-content")) {
     renderDialog();
-    dialog.style.display = "flex";
   } else {
     const pane = document.getElementById("reasy-content");
-    if (pane) {
-      pane.innerHTML = formatMarkdownLite(returnGroq);
-    }
-    loadSettings().then(s => applyContentStyle(s));
-    dialog.style.display = "flex";
+  if (pane) {
+    pane.innerHTML = formatMarkdownLite(returnGroq);
+  }
+}
+
+  // 🔑 cancelar qualquer fechamento pendente
+  if (closeTimerId) {
+    clearTimeout(closeTimerId);
+    closeTimerId = null;
   }
 
+  // 🔑 resetar animação para evitar que fique “presa” no fadeOut
+  dialog.style.animation = "none";
+  void dialog.offsetWidth; // força reflow
+  dialog.style.animation = "fadeIn 0.2s forwards";
+
+  if (lastDialogPos) {
+    dialog.style.left = lastDialogPos.left + "px";
+    dialog.style.top = lastDialogPos.top + "px";
+    dialog.style.right = "auto";
+    dialog.style.bottom = "auto";
+  }
+
+  // por último, mostrar
+  dialog.style.display = "flex";
 
   try { window.getSelection()?.removeAllRanges(); } catch {}
 }

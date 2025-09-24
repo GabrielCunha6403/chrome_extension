@@ -1,8 +1,11 @@
+// popup.js
 const K_SETTINGS = "reasy_settings";
+
 const defaults = {
-  font: "Arial, sans-serif",
-  color: "black",
-  style: "mesclado"
+  enabled: true,                    // Liga/Desliga
+  font: "Arial, sans-serif",        // Fonte do resumo (exibição)
+  color: "black",                   // Cor do resumo
+  style: "mesclado"                 // "texto" | "topicos" | "mesclado"
 };
 
 const $ = (id) => document.getElementById(id);
@@ -15,7 +18,8 @@ function getSettings() {
           console.error("[popup] storage.get error:", chrome.runtime.lastError);
           return reject(chrome.runtime.lastError);
         }
-        resolve({ ...defaults, ...(data[K_SETTINGS] || {}) });
+        const merged = { ...defaults, ...(data[K_SETTINGS] || {}) };
+        resolve(merged);
       });
     } catch (e) {
       reject(e);
@@ -42,45 +46,67 @@ function setSettings(obj) {
 async function loadUI() {
   try {
     const s = await getSettings();
+    // Preenche os campos
+    $("enabled").checked = !!s.enabled;
     $("font").value = s.font;
     $("color").value = s.color;
     $("style").value = s.style;
+
     console.log("[popup] loaded settings:", s);
   } catch (e) {
     console.error("[popup] loadUI failed:", e);
-    $("errMsg").style.display = "block";
+    const err = $("errMsg");
+    if (err) err.style.display = "block";
   }
 }
 
 async function saveUI() {
   const newSettings = {
+    enabled: $("enabled").checked,
     font: $("font").value,
     color: $("color").value,
     style: $("style").value
   };
+
   try {
     await setSettings(newSettings);
     console.log("[popup] saved settings:", newSettings);
-    $("okMsg").style.display = "block";
-    $("errMsg").style.display = "none";
-    setTimeout(() => $("okMsg").style.display = "none", 1200);
+
+    if ($("okMsg")) {
+      $("okMsg").style.display = "block";
+      setTimeout(() => { $("okMsg").style.display = "none"; }, 1200);
+    }
+    if ($("errMsg")) $("errMsg").style.display = "none";
   } catch (e) {
     console.error("[popup] saveUI failed:", e);
-    $("okMsg").style.display = "none";
-    $("errMsg").style.display = "block";
+    if ($("okMsg")) $("okMsg").style.display = "none";
+    if ($("errMsg")) $("errMsg").style.display = "block";
   }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Confirma que os elementos existem
-  if (!$("font") || !$("color") || !$("style") || !$("saveBtn")) {
-    console.error("[popup] algum elemento não foi encontrado no DOM");
-    return;
+  // Verifica a existência dos elementos (evita erros silenciosos)
+  const required = ["enabled", "font", "color", "style", "saveBtn"];
+  for (const id of required) {
+    if (!$(id)) {
+      console.error(`[popup] elemento #${id} não encontrado no DOM`);
+    }
   }
+
   loadUI();
-  $("saveBtn").addEventListener("click", saveUI);
+
+  // Botão salvar
+  $("saveBtn")?.addEventListener("click", saveUI);
+
+  // Pequeno UX: ao mexer em qualquer campo, esconda mensagens
+  for (const id of ["enabled", "font", "color", "style"]) {
+    $(id)?.addEventListener("change", () => {
+      if ($("okMsg")) $("okMsg").style.display = "none";
+      if ($("errMsg")) $("errMsg").style.display = "none";
+    });
+  }
 });
 
 document.getElementById("closePopup").addEventListener("click", () => {
-  window.close();
+    window.close();
 });

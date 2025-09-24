@@ -1,56 +1,56 @@
+// content.js
 console.log("[Reasy] content.js carregado");
 
+// ---------- Estado global ----------
 let selectedText = "";
 let returnGroq = "";
 let closeTimerId = null;
 
 let dragActive = false;
 let dragStart = { x: 0, y: 0 };
-let dialogStart = {left: 0, top: 0};
+let dialogStart = { left: 0, top: 0 };
 let draggableBound = false;
 let lastDialogPos = null;
 
+const DRAG_THRESHOLD = 4;
+const SAFE_MARGIN = 40;
+
+const K_SETTINGS = "reasy_settings";
+const defaultSettings = {
+  font: "Arial, sans-serif",
+  color: "black",
+  style: "mesclado",
+  enabled: true
+};
+let settingsCache = { ...defaultSettings };
+
+// ---------- Elementos base ----------
 const btnResume = createFloatingButton();
 const dialog = createDialog();
-const K_SETTINGS = "reasy_settings"
-const DRAG_THRESHOLD = 4;
-
-const defaultSettings = { font: "Aria, sans-serif", color: "black", style: "mesclado" };
-
 injectBaseStyles();
 
+// carrega as preferências inicialmente
+loadSettings();
+
+// eventos
 btnResume.addEventListener("click", () => openTextDialog());
 
-function loadSettings() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get([K_SETTINGS], (data) => {
-      resolve({ ...defaultSettings, ...(data[K_SETTINGS] || {}) });
-    });
-  });
-}
+// mostra o botão SOMENTE no mouseup (fim da seleção)
+document.addEventListener("mouseup", async () => {
+  // 🔑 carrega o estado mais recente (evita cache desatualizado)
+  const s = await loadSettings();
+  if (!s.enabled) {
+    hideButton();
+    return;
+  }
 
-function applyContentStyle(settings) {
-  const pane = document.getElementById("reasy-content");
-  if (!pane) return;
-  const map = { black: "#111", red: "#c62828", blue: "#1565c0", green: "#2e7d32" };
-  pane.style.color = map[settings.color] || "#111";
-  pane.style.fontFamily = settings.font || "Arial, sans-serif";
-}
-
-function applyContentFont(font) {
-  const pane = document.getElementById("reasy-content");
-  if (!pane) return;
-  pane.style.fontFamily = font;
-}
-
-document.addEventListener("mouseup", () => {
   selectedText = getCurrentSelectionText();
-
   if (!selectedText) {
     hideButton();
     return;
   }
 
+  // se o diálogo estiver visível, não mostra o botão
   const dlg = document.getElementById("ext-selection-dialog");
   const dialogVisible = dlg && dlg.style.display !== "none";
   if (dialogVisible) {
@@ -58,24 +58,23 @@ document.addEventListener("mouseup", () => {
     return;
   }
 
-  const rect = getSelectionEndRect(); // <-- nova função (abaixo)
+  const rect = getSelectionEndRect();
   if (!rect) {
     hideButton();
     return;
   }
 
-  // rect já é relativo à viewport; como o botão é FIXED, não some scroll!
-  const btnW = 36, btnH = 36; // se usar outro tamanho, ajuste
-  const gap = 8;
-
+  // botão é FIXED; coordenadas são de viewport
+  const btnW = 36, btnH = 36, gap = 8;
   const x = Math.min(rect.right + gap, window.innerWidth - btnW - 4);
-  const y = Math.max(rect.bottom - btnH, 4); // alinha pela linha de base do fim
+  const y = Math.max(rect.bottom - btnH, 4);
 
   btnResume.style.left = `${x}px`;
-  btnResume.style.top  = `${y}px`;
+  btnResume.style.top = `${y}px`;
   btnResume.style.display = "flex";
 });
 
+// ---------- Utils de formatação ----------
 function escapeHtml(s) {
   return s
     .replace(/&/g, "&amp;")
@@ -88,11 +87,8 @@ function escapeHtml(s) {
 // Markdown-lite: **bold** e linhas começando com "* "
 function formatMarkdownLite(text) {
   if (!text) return "";
-
-  // 1) escapa HTML
   let t = escapeHtml(text);
 
-  // 2) quebra por linhas para montar listas <ul>
   const lines = t.split(/\r?\n/);
   let html = "";
   let inList = false;
@@ -107,29 +103,26 @@ function formatMarkdownLite(text) {
   for (let raw of lines) {
     const line = raw.trimEnd();
 
-    // linha de tópico: começa com "* "
+    // Bullet
     if (/^\*\s+/.test(line)) {
       if (!inList) {
         html += '<ul style="margin:6px 0 10px 18px; padding-left: 18px;">';
         inList = true;
       }
       const liContent = line.replace(/^\*\s+/, "");
-      // aplica negrito dentro do bullet também
       const liWithBold = liContent.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
       html += `<li>${liWithBold}</li>`;
       continue;
     }
 
-    // não é bullet
+    // linha em branco
     flushListIfOpen();
-
-    // linhas em branco => separador de parágrafo
     if (/^\s*$/.test(line)) {
       html += "<br/>";
       continue;
     }
 
-    // texto normal; aplica **bold**
+    // texto normal com **bold**
     const withBold = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
     html += `<p style="margin: 6px 0;">${withBold}</p>`;
   }
@@ -138,7 +131,7 @@ function formatMarkdownLite(text) {
   return html;
 }
 
-
+// ---------- Criação de UI ----------
 function createFloatingButton() {
   let button = document.getElementById("ext-selection-btn");
   if (!button) {
@@ -216,68 +209,37 @@ function injectBaseStyles() {
   document.documentElement.appendChild(style);
 }
 
-function handleSelectionChange() {
-  const sel = getCurrentSelectionText();
-  selectedText = sel;
-  if (sel) {
-    updateButtonPositionFromSelection();
-  } else {
-    hideButton();
-  }
-}
-
+// ---------- Seleção ----------
 function getCurrentSelectionText() {
   const active = document.activeElement;
-  if (active && (active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && /text|search|tel|url|password|email/i.test(active.type)))) {
+  if (
+    active &&
+    (active.tagName === "TEXTAREA" ||
+      (active.tagName === "INPUT" && /text|search|tel|url|password|email/i.test(active.type)))
+  ) {
     const start = active.selectionStart ?? 0;
     const end = active.selectionEnd ?? 0;
     const val = active.value ?? "";
-    const sub = val.substring(start, end).trim();
-    return sub;
+    return val.substring(start, end).trim();
   }
   const sel = window.getSelection();
   return sel ? (sel.toString() || "").trim() : "";
 }
 
-function updateButtonPositionFromSelection() {
-  try {
-    const rect = getSelectionRect();
-    if (!selectedText || !rect) {
-      hideButton();
-      return;
-    }
-    const x = Math.min(rect.right + 8, window.innerWidth - 44);
-    const y = Math.max(rect.top - 44, 8);
-
-    btnResume.style.left = `${x}px`;
-    btnResume.style.top = `${y + window.scrollY}px`;
-    btnResume.style.display = "flex";
-  } catch (e) {
-    console.warn("[Reasy] não consegui posicionar botão:", e);
-    hideButton();
-  }
-}
-
 function getSelectionRect() {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return null;
-
   const range = sel.getRangeAt(0);
-
-  // 1) Tente o bounding box da seleção inteira (funciona bem em multi-parágrafo)
   const box = range.getBoundingClientRect();
   if (box && box.width > 0 && box.height > 0) return box;
 
-  // 2) Caso raro: some `ClientRects` não nulos
   const rects = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0);
   if (rects.length === 0) return null;
 
-  // Faz a união de todos os retângulos (cobre múltiplos parágrafos/linhas)
-  const left   = Math.min(...rects.map(r => r.left));
-  const top    = Math.min(...rects.map(r => r.top));
-  const right  = Math.max(...rects.map(r => r.right));
+  const left = Math.min(...rects.map(r => r.left));
+  const top = Math.min(...rects.map(r => r.top));
+  const right = Math.max(...rects.map(r => r.right));
   const bottom = Math.max(...rects.map(r => r.bottom));
-
   return new DOMRect(left, top, right - left, bottom - top);
 }
 
@@ -285,17 +247,13 @@ function getSelectionEndRect() {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return null;
 
-  // clona o range atual e colapsa no fim (caret)
   const r = sel.getRangeAt(0).cloneRange();
   r.collapse(false);
 
-  // tenta bounding rect direto
   let rect = r.getBoundingClientRect();
   if (rect && (rect.width > 0 || rect.height > 0)) return rect;
 
-  // se for zero (colunas/linhas vazias), injeta um span invisível para medir
   const span = document.createElement("span");
-  // zero-width space evita quebrar layout
   span.appendChild(document.createTextNode("\u200b"));
   r.insertNode(span);
   rect = span.getBoundingClientRect();
@@ -303,11 +261,11 @@ function getSelectionEndRect() {
   return rect || null;
 }
 
-
 function hideButton() {
   btnResume.style.display = "none";
 }
 
+// ---------- Drag (header como alça) ----------
 function makeDialogDraggable() {
   if (draggableBound) return;
   const header = dialog.querySelector(".reasy-header");
@@ -316,27 +274,21 @@ function makeDialogDraggable() {
   header.style.cursor = "move";
   header.style.userSelect = "none";
   header.style.touchAction = "none";
-  header.style.zIndex = "1"; // header sempre acima do conteúdo
+  header.style.zIndex = "1";
 
   const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
-  const SAFE_MARGIN = 40; // quanto podemos deixar “para fora” da viewport
   let startedAsDrag = false;
 
-  // helper: checa se o mousedown/pointerdown ocorreu dentro da área do header
   function isInHeaderArea(ev) {
     const r = header.getBoundingClientRect();
     return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-  }
+    }
 
   const beginDrag = (ev) => {
-    // só inicia se começou realmente dentro do header
     if (!isInHeaderArea(ev)) return false;
-
-    // ignora cliques nos botões
     const target = ev.target;
     if (target.closest("#ext-min-dialog") || target.closest("#ext-close-dialog")) return false;
 
-    // converte bottom/right => top/left no 1º arraste
     const rect = dialog.getBoundingClientRect();
     dialog.style.position = "fixed";
     dialog.style.left = rect.left + "px";
@@ -373,7 +325,7 @@ function makeDialogDraggable() {
 
     const rect = dialog.getBoundingClientRect();
 
-    // Limites “elásticos”: permitem sair até SAFE_MARGIN para manter sempre arrastável
+    // limites elásticos (permitem sair um pouco para sempre dar espaço)
     const minLeft = Math.min(0, window.innerWidth - SAFE_MARGIN - rect.width);
     const maxLeft = Math.max(0, window.innerWidth - rect.width + SAFE_MARGIN);
     const minTop  = Math.min(0, window.innerHeight - SAFE_MARGIN - rect.height);
@@ -381,6 +333,12 @@ function makeDialogDraggable() {
 
     dialog.style.left = clamp(dialogStart.left + dx, minLeft, maxLeft) + "px";
     dialog.style.top  = clamp(dialogStart.top  + dy, minTop,  maxTop)  + "px";
+
+    // memoriza posição para reabrir no mesmo lugar
+    lastDialogPos = {
+      left: parseFloat(dialog.style.left || "0"),
+      top: parseFloat(dialog.style.top  || "0")
+    };
   };
 
   const endDrag = () => {
@@ -390,7 +348,7 @@ function makeDialogDraggable() {
     startedAsDrag = false;
   };
 
-  // Pointer events (preferidos)
+  // Pointer events preferidos
   const onPointerDown = (e) => {
     if ((e.button !== undefined && e.button !== 0) && (e.buttons !== undefined && e.buttons !== 1)) return;
     const ok = beginDrag(e);
@@ -418,9 +376,7 @@ function makeDialogDraggable() {
   draggableBound = true;
 }
 
-
-
-
+// ---------- Render do diálogo ----------
 function renderDialog() {
   dialog.innerHTML = `
     <div class="reasy-header" style="
@@ -444,32 +400,24 @@ function renderDialog() {
     </div>
 
     <div id="reasy-content" style="
-    overflow:auto; max-height:50vh; line-height:1.45; font-size:14px; white-space:normal;
+      overflow:auto; max-height:50vh; line-height:1.45; font-size:14px; white-space:normal;
     ">${formatMarkdownLite(returnGroq || "Gerando resumo...")}</div>
   `;
 
   // fechar (com controle de timeout)
   document.getElementById("ext-close-dialog").addEventListener("click", () => {
-  // se já existe um timer antigo, cancela
-  if (closeTimerId) {
-    clearTimeout(closeTimerId);
-    closeTimerId = null;
-  }
-
-  // anima para sair
-  dialog.style.animation = "fadeOut 0.2s forwards";
-
-  // agenda esconder após a animação
-  closeTimerId = setTimeout(() => {
-    dialog.style.display = "none";
-    // limpa estados apenas quando realmente fechou
-    selectedText = "";
-    returnGroq = "";
-    closeTimerId = null;
-  }, 200);
-});
-
-  makeDialogDraggable();
+    if (closeTimerId) {
+      clearTimeout(closeTimerId);
+      closeTimerId = null;
+    }
+    dialog.style.animation = "fadeOut 0.2s forwards";
+    closeTimerId = setTimeout(() => {
+      dialog.style.display = "none";
+      selectedText = "";
+      returnGroq = "";
+      closeTimerId = null;
+    }, 200);
+  });
 
   // minimizar/maximizar (só o conteúdo)
   document.getElementById("ext-min-dialog").addEventListener("click", () => {
@@ -493,14 +441,18 @@ function renderDialog() {
       `;
     }
 
+    // pequeno reset para manter animação coerente
     dialog.style.animation = "none";
     void dialog.offsetWidth;
-    dialog.style.animation = "fadeIn 0.2s forwards"
+    dialog.style.animation = "fadeIn 0.2s forwards";
   });
 
+  // aplica estilo (fonte/cor) e liga o drag
   loadSettings().then(s => applyContentStyle(s));
+  makeDialogDraggable();
 }
 
+// ---------- Loading no botão ----------
 function startButtonLoading() {
   btnResume.innerHTML = `
     <svg id="load-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width:18px;height:18px;">
@@ -509,8 +461,13 @@ function startButtonLoading() {
   btnResume.style.pointerEvents = "none";
 }
 
+// ---------- Abrir diálogo e chamar o resumo ----------
 async function openTextDialog() {
+  // respeita o toggle
+  const s = await loadSettings();
+  if (!s.enabled) return;
   if (!selectedText) return;
+
   startButtonLoading();
 
   try {
@@ -528,42 +485,43 @@ async function openTextDialog() {
     btnResume.style.display = "none";
   }
 
+  // render inicial ou só atualizar conteúdo
   if (!document.getElementById("reasy-content")) {
     renderDialog();
   } else {
     const pane = document.getElementById("reasy-content");
-  if (pane) {
-    pane.innerHTML = formatMarkdownLite(returnGroq);
+    if (pane) pane.innerHTML = formatMarkdownLite(returnGroq);
+    loadSettings().then(s => applyContentStyle(s));
   }
-}
 
-  // 🔑 cancelar qualquer fechamento pendente
+  // cancelar fechamento pendente
   if (closeTimerId) {
     clearTimeout(closeTimerId);
     closeTimerId = null;
   }
 
-  // 🔑 resetar animação para evitar que fique “presa” no fadeOut
+  // reset de animação
   dialog.style.animation = "none";
-  void dialog.offsetWidth; // força reflow
+  void dialog.offsetWidth;
   dialog.style.animation = "fadeIn 0.2s forwards";
 
+  // reposicionar para a última posição conhecida (se houver)
   if (lastDialogPos) {
     dialog.style.left = lastDialogPos.left + "px";
-    dialog.style.top = lastDialogPos.top + "px";
+    dialog.style.top  = lastDialogPos.top + "px";
     dialog.style.right = "auto";
     dialog.style.bottom = "auto";
   }
 
-  // por último, mostrar
   dialog.style.display = "flex";
 
   try { window.getSelection()?.removeAllRanges(); } catch {}
 }
 
+// ---------- Chamada ao background ----------
 function consultaGroq(text) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ type: "summarize", text }, (resp) => {
+    chrome.runtime.sendMessage({ type: "summarize", text, options: { style: settingsCache.style } }, (resp) => {
       if (chrome.runtime.lastError) {
         console.error("[Reasy] runtime error:", chrome.runtime.lastError);
         return reject(chrome.runtime.lastError);
@@ -582,9 +540,35 @@ function consultaGroq(text) {
   });
 }
 
+// ---------- Configurações ----------
+function loadSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([K_SETTINGS], (data) => {
+      settingsCache = { ...defaultSettings, ...(data[K_SETTINGS] || {}) };
+      resolve(settingsCache);
+    });
+  });
+}
+
+function applyContentStyle(settings) {
+  const pane = document.getElementById("reasy-content");
+  if (!pane) return;
+  const map = { black: "#111", red: "#c62828", blue: "#1565c0", green: "#2e7d32" };
+  pane.style.color = map[settings.color] || "#111";
+  pane.style.fontFamily = settings.font || "Arial, sans-serif";
+}
+
+// reage a mudanças do popup
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[K_SETTINGS]) return;
-  const newSettings = { ...defaultSettings, ...(changes[K_SETTINGS].newValue || {}) };
-  applyContentStyle(newSettings);
-});
+  settingsCache = { ...defaultSettings, ...(changes[K_SETTINGS].newValue || {}) };
+  applyContentStyle(settingsCache);
 
+  // se desligou, some com o botão e fecha o diálogo
+  if (!settingsCache.enabled) {
+    hideButton();
+    if (dialog && dialog.style.display !== "none") {
+      dialog.style.display = "none";
+    }
+  }
+});

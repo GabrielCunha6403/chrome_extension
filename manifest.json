@@ -13,5 +13,11 @@
     "default_title": "Reasy",
     "default_popup": "popup.html"
   
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["popup.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

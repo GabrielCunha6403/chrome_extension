@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Reasy — Configurações</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1 class="title">Configurações</h1>
+      <div class="spacer"></div>
+      <button class="close-btn" id="closePopup" title="Fechar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 512">
+          <path d="M242.7 256l100.1-100.1c12.3-12.3 12.3-32.2 
+          0-44.5l-22.2-22.2c-12.3-12.3-32.2-12.3-44.5 
+          0L176 189.3 75.9 89.2c-12.3-12.3-32.2-12.3-44.5 
+          0L9.2 111.5c-12.3 12.3-12.3 32.2 0 
+          44.5L109.3 256 9.2 356.1c-12.3 12.3-12.3 
+          32.2 0 44.5l22.2 22.2c12.3 12.3 32.2 12.3 
+          44.5 0L176 322.7l100.1 100.1c12.3 
+          12.3 32.2 12.3 44.5 0l22.2-22.2c12.3-12.3 
+          12.3-32.2 0-44.5L242.7 256z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="content">
+      <div class="row">
+        <div class="switch">
+          <span class="switch-label">Ativar botão de resumo</span>
+          <div class="switch-wrapper">
+            <input type="checkbox" id="enabled" class="switch-input" role="switch" aria-label="Ativar botão de resumo">
+            <div class="switch-control"></div>
+            <span class="switch-thumb"></span>
+          </div>
+        </div>
+        <div class="hint">Quando desligado, o botão não aparece ao selecionar texto.</div>
+      </div>
+      <div class="row">
+        <label for="font">Fonte do Resumo</label>
+        <select id="font">
+          <option value="Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, sans-serif">Inter/Sistema (padrão)</option>
+          <option value="Arial, sans-serif">Arial</option>
+          <option value="Times New Roman, serif">Times New Roman</option>
+          <option value="Verdana, sans-serif">Verdana</option>
+          <option value="Georgia, serif">Georgia</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="color">Cor do Resumo</label>
+        <select id="color">
+          <option value="black">Preto</option>
+          <option value="red">Vermelho</option>
+          <option value="blue">Azul</option>
+          <option value="green">Verde</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="style">Tipo do Resumo</label>
+        <select id="style">
+          <option value="texto">Apenas texto</option>
+          <option value="topicos">Com tópicos</option>
+          <option value="mesclado" selected>Mesclado</option>
+        </select>
+      </div>
+      <div class="hint">As preferências ficam salvas neste navegador.</div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="saveBtn">Salvar</button>
+      <div class="ok" id="okMsg">Preferências salvas!</div>
+      <div class="err" id="errMsg">Erro ao salvar (veja o console do popup).</div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
